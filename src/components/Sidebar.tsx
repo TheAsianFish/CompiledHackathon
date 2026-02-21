@@ -1,124 +1,78 @@
-import React from 'react'
+import { useAdaptive } from '../context/AdaptiveContext'
 
-type NavItem = {
-  id: string
-  label: string
-  icon: React.ReactNode
-  section?: string
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard',   label: 'Dashboard',        icon: <GridIcon />,     section: 'MAIN' },
-  { id: 'analytics',   label: 'Analytics',         icon: <ChartBarIcon />, section: 'MAIN' },
-  { id: 'engagement',  label: 'Engagement',        icon: <ActivityIcon />, section: 'MAIN' },
-  { id: 'users',       label: 'Users',             icon: <UsersIcon />,    section: 'EXPLORE' },
-  { id: 'interfaces',  label: 'Interface Studio',  icon: <LayersIcon />,   section: 'EXPLORE' },
-  { id: 'ai',          label: 'AI Insights',       icon: <SparkleIcon />,  section: 'EXPLORE' },
-  { id: 'settings',    label: 'Settings',          icon: <SettingsIcon />, section: 'SYSTEM' },
+const NAV = [
+  { id: 'focus',    label: 'Focus',    icon: <TargetIcon /> },
+  { id: 'tasks',    label: 'Tasks',    icon: <CheckSquareIcon /> },
+  { id: 'insights', label: 'Insights', icon: <TrendingIcon /> },
+  { id: 'settings', label: 'Settings', icon: <SettingsIcon /> },
 ]
 
-type SidebarProps = {
-  active: string
-  onNavigate: (id: string) => void
-}
+type Props = { active: string; onNavigate: (id: string) => void }
 
-export default function Sidebar({ active, onNavigate }: SidebarProps) {
-  const sections = ['MAIN', 'EXPLORE', 'SYSTEM'] as const
+export default function Sidebar({ active, onNavigate }: Props) {
+  const { focusState } = useAdaptive()
+  const collapsed = focusState === 'focus'
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <div className="sidebar-logo">
-        <div className="logo-mark">A</div>
-        <span className="logo-text">AdaptUI</span>
+        <div className="logo-mark">F</div>
+        {!collapsed && <span className="logo-text">FlowDesk</span>}
       </div>
 
       <nav className="sidebar-nav">
-        {sections.map((section) => {
-          const items = NAV_ITEMS.filter((i) => i.section === section)
-          return (
-            <div key={section}>
-              <div className="sidebar-section-label">{section}</div>
-              {items.map((item) => (
-                <button
-                  key={item.id}
-                  className={`nav-item ${active === item.id ? 'active' : ''}`}
-                  onClick={() => onNavigate(item.id)}
-                >
-                  <span className="nav-icon">{item.icon}</span>
-                  <span className="nav-label">{item.label}</span>
-                </button>
-              ))}
-            </div>
-          )
-        })}
+        {NAV.map((item) => (
+          <button
+            key={item.id}
+            className={`nav-item ${active === item.id ? 'active' : ''}`}
+            onClick={() => onNavigate(item.id)}
+            title={collapsed ? item.label : undefined}
+          >
+            <span className="nav-icon">{item.icon}</span>
+            {!collapsed && <span className="nav-label">{item.label}</span>}
+          </button>
+        ))}
       </nav>
 
-      <div className="sidebar-footer">
-        <div className="user-avatar">P</div>
-        <div className="user-info">
-          <span className="user-name">Patrick C.</span>
-          <span className="user-role">Admin</span>
+      {!collapsed && (
+        <div className="sidebar-footer">
+          <div className="user-avatar">P</div>
+          <div className="user-info">
+            <span className="user-name">Patrick C.</span>
+            <span className="user-role">Pro</span>
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   )
 }
 
 /* ── Icons ──────────────────────────────────────────────────── */
 
-function GridIcon() {
+function TargetIcon() {
   return (
     <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" />
     </svg>
   )
 }
 
-function ChartBarIcon() {
+function CheckSquareIcon() {
   return (
     <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <line x1="18" y1="20" x2="18" y2="10" />
-      <line x1="12" y1="20" x2="12" y2="4" />
-      <line x1="6"  y1="20" x2="6"  y2="14" />
+      <polyline points="9 11 12 14 22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
     </svg>
   )
 }
 
-function ActivityIcon() {
+function TrendingIcon() {
   return (
     <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  )
-}
-
-function UsersIcon() {
-  return (
-    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  )
-}
-
-function LayersIcon() {
-  return (
-    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <polygon points="12 2 2 7 12 12 22 7 12 2" />
-      <polyline points="2 17 12 22 22 17" />
-      <polyline points="2 12 12 17 22 12" />
-    </svg>
-  )
-}
-
-function SparkleIcon() {
-  return (
-    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+      <polyline points="17 6 23 6 23 12" />
     </svg>
   )
 }
