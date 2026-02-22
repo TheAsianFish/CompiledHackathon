@@ -769,6 +769,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Live Signals: purple */
+.signals-title  { color: #7c3aed; }
+.signals-value  { color: #7c3aed; }
+
+/* Thresholds: teal */
+.thresholds-title { color: #0d9488; }
+.thresholds-value { color: #0d9488; font-size: 11px !important; }
+
 /* ── Task List ─────────────────────────────────────────────── */
 
 .task-list {
@@ -928,6 +936,10 @@
 .priority-pip-high   { background: var(--red); }
 .priority-pip-medium { background: var(--yellow); }
 .priority-pip-low    { background: var(--green); }
+
+.task-item.priority-high   { border-color: rgba(239, 68,  68,  0.35); }
+.task-item.priority-medium { border-color: rgba(245, 158, 11,  0.35); }
+.task-item.priority-low    { border-color: rgba(16,  185, 129, 0.35); }
 
 .task-delete {
   flex-shrink: 0;

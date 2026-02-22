@@ -77,7 +77,7 @@ export default function ChatInterface({ activeTask, allTasks }: Props) {
   const handleSend = () => {
     const text = input.trim()
     if (!text || loading) return
-    send(text)
+    send(text, true) // freeform = true for typed messages — plain text response, no JSON required
     setInput('')
     inputRef.current?.focus()
   }
@@ -98,6 +98,9 @@ export default function ChatInterface({ activeTask, allTasks }: Props) {
             </span>
             {apiStatus === 'no_key' && (
               <span className="api-status-badge api-status-nokey" title="Add VITE_OPENAI_API_KEY to .env.local">⚠️ Demo</span>
+            )}
+            {apiStatus === 'rate_limit' && (
+              <span className="api-status-badge api-status-error" title="OpenAI rate limit hit — retrying automatically">⏳ Slow down</span>
             )}
             {apiStatus === 'error' && (
               <span className="api-status-badge api-status-error" title="API call failed — check console">✕ Error</span>

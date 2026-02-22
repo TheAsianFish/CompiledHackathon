@@ -5,7 +5,7 @@ import type { Task } from '../components/TaskList'
 
 export type Intent = 'code' | 'explain' | 'compare' | 'quiz' | 'general'
 export type TaskType = 'code' | 'study' | 'review' | 'design' | 'general'
-export type ApiStatus = 'unknown' | 'ok' | 'no_key' | 'error'
+export type ApiStatus = 'unknown' | 'ok' | 'no_key' | 'rate_limit' | 'error'
 
 export type QuizQuestion = {
   question: string
@@ -109,27 +109,51 @@ Only include the fields that match the chosen intent.`
 
 /* ── OpenAI call ────────────────────────────────────────────── */
 
+function buildFreeformPrompt(activeTask: Task, focusState: string): string {
+  return `You are FlowDesk AI, a task-focused productivity assistant. The user is working on: "${activeTask.text}".
+Behavioral state: ${focusState}.
+Answer their question directly and helpfully. Keep responses focused on their task.
+${focusState === 'focus' ? 'Be concise — they are in Deep Focus mode.' : ''}
+Do NOT use JSON. Just respond naturally in plain text.`
+}
+
 async function callOpenAI(
   userText: string,
   history: ChatMsg[],
   activeTask: Task,
   allTasks: Task[],
   focusState: string,
+  freeform = false,
+  retryCount = 0,
 ): Promise<AIPayload> {
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY
   if (!apiKey) throw new Error('no_key')
 
+  const systemPrompt = freeform
+    ? buildFreeformPrompt(activeTask, focusState)
+    : buildSystemPrompt(activeTask, allTasks, focusState)
+
   const messages = [
-    { role: 'system' as const, content: buildSystemPrompt(activeTask, allTasks, focusState) },
-    ...history.slice(-8).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.text })),
+    { role: 'system' as const, content: systemPrompt },
+    ...history.slice(-6).map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.text.slice(0, 500),
+    })),
     { role: 'user' as const, content: userText },
   ]
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: 'gpt-4o-mini', messages, temperature: 0.6, max_tokens: 1600 }),
+    body: JSON.stringify({ model: 'gpt-4o-mini', messages, temperature: 0.7, max_tokens: 1200 }),
   })
+
+  // Rate limited — wait and retry once
+  if (res.status === 429 && retryCount < 1) {
+    const retryAfter = Number(res.headers.get('retry-after') ?? 8)
+    await new Promise((r) => setTimeout(r, retryAfter * 1000))
+    return callOpenAI(userText, history, activeTask, allTasks, focusState, freeform, retryCount + 1)
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -138,8 +162,23 @@ async function callOpenAI(
 
   const data = await res.json()
   const raw: string = data.choices[0].message.content.trim()
-  const clean = raw.replace(/^```json?\n?/, '').replace(/\n?```$/, '')
-  return JSON.parse(clean) as AIPayload
+
+  // Freeform: just return plain text, no JSON parsing needed
+  if (freeform) {
+    return { intent: 'general', text: raw }
+  }
+
+  // Structured: robustly extract the JSON object
+  const start = raw.indexOf('{')
+  const end   = raw.lastIndexOf('}')
+  if (start === -1 || end === -1) throw new Error(`parse_error: no JSON object found in: ${raw.slice(0, 200)}`)
+
+  const jsonStr = raw.slice(start, end + 1)
+  try {
+    return JSON.parse(jsonStr) as AIPayload
+  } catch {
+    throw new Error(`parse_error: invalid JSON: ${jsonStr.slice(0, 200)}`)
+  }
 }
 
 /* ── Fallback (no API key or error) ─────────────────────────── */
@@ -147,8 +186,8 @@ async function callOpenAI(
 function detectIntent(text: string): Intent {
   const t = text.toLowerCase()
   if (/\b(code|function|implement|write|snippet|script|example)\b/.test(t)) return 'code'
-  if (/\b(explain|what is|how does|tell me|teach|describe|define)\b/.test(t)) return 'explain'
-  if (/\b(compare|vs|versus|difference|pros|cons|which)\b/.test(t)) return 'compare'
+  if (/\b(explain|what is|how does|tell me|teach|describe|define|learn|learning|step by step|how to|best way|path|guide|overview)\b/.test(t)) return 'explain'
+  if (/\b(compare|vs|versus|difference|pros|cons|which|trade.?off)\b/.test(t)) return 'compare'
   if (/\b(quiz|test me|flashcard|practice|assess)\b/.test(t)) return 'quiz'
   return 'general'
 }
@@ -231,7 +270,7 @@ function fallback(userText: string, activeTask: Task): AIPayload {
 function buildWelcome(activeTask: Task | null): ChatMsg {
   const text = activeTask
     ? `I'm locked to your task: **${activeTask.text}**\n\nAsk me anything about it — I can write code, explain concepts, compare approaches, or quiz you. Use the task panel to switch tasks.`
-    : `Select a task from the panel to get started. I'll focus entirely on helping you complete it.`
+    : `👋 Welcome to FlowDesk AI.\n\nAdd your tasks in the panel on the left, then click one to focus on it. I'll lock to that task and help you get it done — code, explanations, comparisons, quizzes — whatever it takes.`
 
   return { id: 'welcome', role: 'assistant', intent: 'general', text, timestamp: new Date() }
 }
@@ -261,7 +300,7 @@ export function useChat(activeTask: Task | null, allTasks: Task[], focusState: s
     }
   }, [activeTask])
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, freeform = false) => {
     if (!text.trim()) return
 
     const userMsg: ChatMsg = {
@@ -283,12 +322,17 @@ export function useChat(activeTask: Task | null, allTasks: Task[], focusState: s
       payload = fallback(text, activeTask ?? { id: '', text: 'your task', priority: 'medium', done: false, studyMode: false })
     } else {
       try {
-        payload = await callOpenAI(text, messages, activeTask ?? allTasks[0], allTasks, focusState)
+        payload = await callOpenAI(text, messages, activeTask ?? allTasks[0], allTasks, focusState, freeform)
         setApiStatus('ok')
       } catch (err) {
-        const msg = err instanceof Error ? err.message : ''
-        setApiStatus(msg === 'no_key' ? 'no_key' : 'error')
-        console.error('[FlowDesk] AI call failed:', err)
+        const msg = err instanceof Error ? err.message : String(err)
+        const status =
+          msg === 'no_key'              ? 'no_key'     :
+          msg.includes('429')           ? 'rate_limit' :
+          msg.startsWith('parse_error') ? 'ok'         :
+          'error'
+        setApiStatus(status)
+        console.error('[FlowDesk] AI call failed:', msg)
         payload = fallback(text, activeTask ?? { id: '', text: 'your task', priority: 'medium', done: false, studyMode: false })
       }
     }

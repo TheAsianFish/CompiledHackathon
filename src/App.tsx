@@ -11,26 +11,29 @@ import TaskList from './components/TaskList'
 import { Widget } from './components/Widget'
 import './App.css'
 
-const SEED_TASKS: Task[] = [
-  { id: '1', text: 'Review pull request #42',         priority: 'high',   done: false, studyMode: false },
-  { id: '2', text: 'Write tests for auth module',     priority: 'high',   done: false, studyMode: false },
-  { id: '3', text: 'Study React hooks and useEffect', priority: 'medium', done: false, studyMode: true  },
-  { id: '4', text: 'Learn TypeScript generics',       priority: 'medium', done: false, studyMode: true  },
-  { id: '5', text: 'Respond to design feedback',      priority: 'low',    done: false, studyMode: false },
-]
+const STORAGE_VERSION = 'v2' // bump this to wipe old seed data on next load
 
 function load<T>(key: string, fallback: T): T {
   try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fallback } catch { return fallback }
 }
 
+function clearSeedDataIfNeeded() {
+  if (localStorage.getItem('flowdesk:version') !== STORAGE_VERSION) {
+    localStorage.removeItem('flowdesk:tasks')
+    localStorage.removeItem('flowdesk:activeTask')
+    localStorage.removeItem('flowdesk:quizScores')
+    localStorage.setItem('flowdesk:version', STORAGE_VERSION)
+  }
+}
+
 export default function App() {
+  clearSeedDataIfNeeded()
+
   const { focusState, signals, exitFocus } = useAdaptiveState()
-  const [tasks,       setTasks]       = useState<Task[]>(() => load('flowdesk:tasks', SEED_TASKS))
-  const [quizScores,  setQuizScores]  = useState<number[]>(() => load('flowdesk:quizScores', []))
-  const [activeTaskId, setActiveTaskId] = useState<string | null>(() =>
-    load('flowdesk:activeTask', SEED_TASKS[0]?.id ?? null)
-  )
-  const [chatOpen, setChatOpen] = useState<boolean>(() => load('flowdesk:chatOpen', false))
+  const [tasks,        setTasks]       = useState<Task[]>(() => load('flowdesk:tasks', []))
+  const [quizScores,   setQuizScores]  = useState<number[]>(() => load('flowdesk:quizScores', []))
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(() => load('flowdesk:activeTask', null))
+  const [chatOpen,     setChatOpen]    = useState<boolean>(() => load('flowdesk:chatOpen', false))
 
   useEffect(() => { localStorage.setItem('flowdesk:tasks',      JSON.stringify(tasks))       }, [tasks])
   useEffect(() => { localStorage.setItem('flowdesk:quizScores', JSON.stringify(quizScores))  }, [quizScores])
@@ -48,11 +51,12 @@ export default function App() {
 
   const activeTask = tasks.find((t) => t.id === activeTaskId && !t.done) ?? null
 
-  // Auto-advance to next task when current completes
+  // Auto-select first incomplete task when active one is completed/removed
   useEffect(() => {
     if (!activeTask) {
       const next = tasks.find((t) => !t.done)
       if (next) setActiveTaskId(next.id)
+      else setActiveTaskId(null)
     }
   }, [activeTask, tasks])
 
@@ -67,16 +71,17 @@ export default function App() {
           <StateBanner />
 
           <div className={`workspace ${chatOpen ? 'chat-open' : ''}`}>
-            {/* ── Task Dashboard ─────────────────────────── */}
             <main className="task-dashboard">
               <div className="dashboard-grid">
                 <div className="tasks-col">
                   <Widget
                     title="Your Tasks"
                     subtitle={
-                      urgentSort
-                        ? 'Sorted by priority — focus on what matters most'
-                        : 'Click a task to focus the AI on it · Toggle 📚 for study mode'
+                      tasks.filter(t => !t.done).length === 0
+                        ? 'Add your first task above to get started'
+                        : urgentSort
+                          ? 'Sorted by priority — focus on what matters most'
+                          : 'Click a task to focus the AI on it · Toggle 📚 for study mode'
                     }
                     icon={<TasksIcon />}
                     iconBg="var(--accent-light)"
@@ -96,7 +101,6 @@ export default function App() {
               </div>
             </main>
 
-            {/* ── Chat Panel (slide-in) ───────────────────── */}
             <aside className={`chat-drawer ${chatOpen ? 'open' : ''}`}>
               <div className="chat-drawer-inner">
                 <ChatInterface activeTask={activeTask} allTasks={tasks} />
