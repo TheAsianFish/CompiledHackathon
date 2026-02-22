@@ -13,7 +13,7 @@ const CONFIG: Record<FocusState, { label: string; desc: string; color: string; b
   shallow: {
     emoji: '💭',
     label: 'Shallow Work',
-    desc: "Active but not deep-focused. Pick a high-priority task to shift gears.",
+    desc: 'Active but not deep-focused. Pick a high-priority task to shift gears.',
     color: '#2563eb',
     bg: '#eff6ff',
   },
@@ -27,46 +27,76 @@ const CONFIG: Record<FocusState, { label: string; desc: string; color: string; b
   burnout: {
     emoji: '😴',
     label: 'Rest Mode',
-    desc: 'Long session detected. Stepping away for a few minutes improves output quality.',
+    desc: 'Long session detected. Stepping away briefly improves output quality.',
     color: '#dc2626',
     bg: '#fef2f2',
   },
 }
 
 export default function StatePanel() {
-  const { focusState, signals } = useAdaptive()
+  const { focusState, signals, comprehensionScore } = useAdaptive()
   const cfg = CONFIG[focusState]
 
-  const rows = [
-    { label: 'Idle time',     value: `${signals.idleSeconds}s` },
-    { label: 'Typing rate',   value: `${signals.keystrokesPerMin} kpm` },
-    { label: 'Tab switches',  value: `${signals.tabSwitches}` },
-    { label: 'Session',       value: `${signals.sessionMinutes}m` },
+  const signalRows = [
+    { label: 'Idle time',    value: `${signals.idleSeconds}s` },
+    { label: 'Typing rate',  value: `${signals.keystrokesPerMin} kpm` },
+    { label: 'Tab switches', value: `${signals.tabSwitches}` },
+    { label: 'Session',      value: `${signals.sessionMinutes}m` },
   ]
 
   const thresholdRows = [
-    { label: 'Focus triggers at',      value: '≥ 10 kpm, idle < 18s' },
-    { label: 'Distracted triggers at', value: 'idle ≥ 30s' },
-    { label: 'Break suggested at',     value: '25 min session' },
+    { label: 'Focus',      value: '≥ 10 kpm, idle < 40s' },
+    { label: 'Distracted', value: 'idle ≥ 90s' },
+    { label: 'Rest Mode',  value: '25 min session' },
   ]
+
+  const comprColor =
+    comprehensionScore === null ? cfg.color :
+    comprehensionScore >= 80   ? '#10b981' :
+    comprehensionScore >= 60   ? '#3b82f6' :
+                                  '#ef4444'
+
+  const comprLabel =
+    comprehensionScore === null ? null :
+    comprehensionScore >= 80   ? 'Strong retention' :
+    comprehensionScore >= 60   ? 'Decent understanding' :
+                                  'Needs reinforcement'
 
   return (
     <div
       className="state-panel"
       style={{ '--state-color': cfg.color, '--state-bg': cfg.bg } as CSSProperties}
     >
+      {/* State header */}
       <div className="state-panel-head">
         <span className="state-emoji">{cfg.emoji}</span>
-        <div>
-          <div className="state-panel-label">{cfg.label}</div>
-        </div>
+        <div className="state-panel-label">{cfg.label}</div>
       </div>
-
       <p className="state-panel-desc">{cfg.desc}</p>
 
+      {/* Comprehension score (only shows after quizzes) */}
+      {comprehensionScore !== null && (
+        <div className="comprehension-block" style={{ '--compr-color': comprColor } as CSSProperties}>
+          <div className="comprehension-header">
+            <span className="comprehension-title">📊 Comprehension</span>
+            <span className="comprehension-score" style={{ color: comprColor }}>
+              {comprehensionScore}%
+            </span>
+          </div>
+          <div className="comprehension-bar-track">
+            <div
+              className="comprehension-bar-fill"
+              style={{ width: `${comprehensionScore}%`, background: comprColor }}
+            />
+          </div>
+          <p className="comprehension-label">{comprLabel} · rolling avg of last 5 quizzes</p>
+        </div>
+      )}
+
+      {/* Live signals */}
       <div className="state-section-title">Live signals</div>
       <div className="state-metrics">
-        {rows.map((r) => (
+        {signalRows.map((r) => (
           <div key={r.label} className="state-metric-row">
             <span className="state-metric-label">{r.label}</span>
             <span className="state-metric-value">{r.value}</span>
@@ -74,6 +104,7 @@ export default function StatePanel() {
         ))}
       </div>
 
+      {/* Thresholds */}
       <div className="state-section-title" style={{ marginTop: 14 }}>Thresholds</div>
       <div className="state-metrics">
         {thresholdRows.map((r) => (

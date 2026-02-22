@@ -9,11 +9,13 @@ export type AdaptiveSignals = {
   sessionMinutes: number
 }
 
-// Tuned for demo-friendliness: type for ~10s to enter focus, idle 30s to go distracted
+// Focus: typing actively and not idle long (allows reading AI responses before dropping out)
+// Shallow: active but not in a typing flow
+// Distracted: genuinely idle — no mouse or keyboard for 90s
 const T = {
   FOCUS_MIN_KPM: 10,
-  FOCUS_MAX_IDLE_S: 18,
-  DISTRACTED_MIN_IDLE_S: 30,
+  FOCUS_MAX_IDLE_S: 40,
+  DISTRACTED_MIN_IDLE_S: 90,
   BURNOUT_MIN_SESSION_M: 25,
 }
 
@@ -24,6 +26,8 @@ function classify(s: AdaptiveSignals): FocusState {
   return 'shallow'
 }
 
+const MANUAL_EXIT_DURATION_MS = 30 * 1000 // override lasts 30s — enough to prevent instant re-entry
+
 export function useAdaptiveState() {
   const [signals, setSignals] = useState<AdaptiveSignals>({
     idleSeconds: 0,
@@ -32,6 +36,7 @@ export function useAdaptiveState() {
     sessionMinutes: 0,
   })
   const [focusState, setFocusState] = useState<FocusState>('shallow')
+  const manualExitMs = useRef(0)
 
   const lastActivityMs = useRef(0)
   const keyTimestamps = useRef<number[]>([])
@@ -78,7 +83,11 @@ export function useAdaptiveState() {
       }
 
       setSignals(next)
-      setFocusState(classify(next))
+      const natural = classify(next)
+      const manuallyExited =
+        manualExitMs.current > 0 &&
+        Date.now() - manualExitMs.current < MANUAL_EXIT_DURATION_MS
+      setFocusState(natural === 'focus' && manuallyExited ? 'shallow' : natural)
     }, 1000)
 
     return () => {
@@ -90,5 +99,10 @@ export function useAdaptiveState() {
     }
   }, [onActivity, onKeyDown, onVisibility])
 
-  return { focusState, signals }
+  const exitFocus = useCallback(() => {
+    manualExitMs.current = Date.now()
+    setFocusState('shallow')
+  }, [])
+
+  return { focusState, signals, exitFocus }
 }
